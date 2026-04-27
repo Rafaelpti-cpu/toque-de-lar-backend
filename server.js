@@ -4,10 +4,10 @@ const multer = require('multer');
 const { Pool } = require('pg');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT;
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'toquedelar2025';
 
-// CORS manual — garante headers em todas as respostas
+// CORS
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
@@ -15,13 +15,12 @@ app.use((req, res, next) => {
   if (req.method === 'OPTIONS') return res.sendStatus(200);
   next();
 });
-app.use(cors({ origin: '*' }));
 app.use(express.json({ limit: '20mb' }));
 
 // PostgreSQL
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+  ssl: { rejectUnauthorized: false }
 });
 
 // Multer
@@ -53,11 +52,11 @@ async function initDB() {
       value TEXT
     );
     INSERT INTO settings (key, value) VALUES ('banner_title', 'O toque que faz um lar de verdade.') ON CONFLICT (key) DO NOTHING;
-    INSERT INTO settings (key, value) VALUES ('banner_subtitle', 'Qualidade e carinho em cada detalhe para o seu lar.') ON CONFLICT (key) DO NOTHING;
+    INSERT INTO settings (key, value) VALUES ('banner_subtitle', 'Qualidade e carinho em cada detalhe.') ON CONFLICT (key) DO NOTHING;
     INSERT INTO settings (key, value) VALUES ('whatsapp', '5500000000000') ON CONFLICT (key) DO NOTHING;
     INSERT INTO settings (key, value) VALUES ('banner_image', '') ON CONFLICT (key) DO NOTHING;
   `);
-  console.log('✅ Banco inicializado');
+  console.log('Banco inicializado');
 }
 
 // ─── AUTH ──────────────────────────────────────────────────
@@ -130,10 +129,9 @@ app.post('/api/admin/products/:id/images', auth, upload.single('image'), async (
     const count = await pool.query('SELECT COUNT(*) FROM product_images WHERE product_id=$1', [productId]);
     if (parseInt(count.rows[0].count) >= 4) return res.status(400).json({ error: 'Máximo de 4 fotos' });
     const imageData = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
-    const order = parseInt(count.rows[0].count);
     const { rows } = await pool.query(
-      'INSERT INTO product_images (product_id, image_data, image_order) VALUES ($1, $2, $3) RETURNING id, image_order',
-      [productId, imageData, order]
+      'INSERT INTO product_images (product_id, image_data, image_order) VALUES ($1, $2, $3) RETURNING id',
+      [productId, imageData, parseInt(count.rows[0].count)]
     );
     res.json({ ok: true, id: rows[0].id });
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -158,12 +156,15 @@ app.put('/api/admin/settings', auth, async (req, res) => {
 app.put('/api/admin/settings/banner-image', auth, upload.single('image'), async (req, res) => {
   try {
     const imageData = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
-    await pool.query('INSERT INTO settings (key, value) VALUES (\'banner_image\', $1) ON CONFLICT (key) DO UPDATE SET value = $1', [imageData]);
+    await pool.query("INSERT INTO settings (key, value) VALUES ('banner_image', $1) ON CONFLICT (key) DO UPDATE SET value = $1", [imageData]);
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // ─── START ──────────────────────────────────────────────────
 initDB().then(() => {
-  app.listen(PORT, () => console.log(`🏡 Toque de Lar API rodando na porta ${PORT}`));
+  app.listen(PORT, () => console.log(`Toque de Lar API rodando na porta ${PORT}`));
+}).catch(e => {
+  console.error('Erro ao iniciar:', e.message);
+  process.exit(1);
 });
