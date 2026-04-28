@@ -21,6 +21,11 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejec
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 
 async function initDB() {
+  // Adicionar colunas novas em tabelas existentes
+  await pool.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS sort_order INTEGER DEFAULT 0`).catch(() => {});
+  await pool.query(`CREATE TABLE IF NOT EXISTS testimonials (id SERIAL PRIMARY KEY, name VARCHAR(255) NOT NULL, text TEXT NOT NULL, stars INTEGER DEFAULT 5, active BOOLEAN DEFAULT true, created_at TIMESTAMP DEFAULT NOW())`).catch(() => {});
+  await pool.query(`CREATE TABLE IF NOT EXISTS interest_log (id SERIAL PRIMARY KEY, product_id INTEGER, product_name VARCHAR(255), created_at TIMESTAMP DEFAULT NOW())`).catch(() => {});
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS products (id SERIAL PRIMARY KEY, name VARCHAR(255) NOT NULL, category VARCHAR(100) DEFAULT 'Geral', price DECIMAL(10,2) DEFAULT 0, description TEXT DEFAULT '', available BOOLEAN DEFAULT true, sort_order INTEGER DEFAULT 0, created_at TIMESTAMP DEFAULT NOW());
     CREATE TABLE IF NOT EXISTS product_images (id SERIAL PRIMARY KEY, product_id INTEGER REFERENCES products(id) ON DELETE CASCADE, image_data TEXT, image_order INTEGER DEFAULT 0);
