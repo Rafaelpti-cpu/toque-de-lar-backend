@@ -111,15 +111,35 @@ app.delete('/api/admin/products/:id', auth, async (req, res) => {
   catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.post('/api/admin/products/:id/images', auth, upload.single('image'), async (req, res) => {
+// ═══════════════════════════════════════════════════════════
+// CLOUDINARY: upload de fotos de produtos (recebe URL, não arquivo)
+// ═══════════════════════════════════════════════════════════
+app.post('/api/admin/products/:id/images', auth, async (req, res) => {
   try {
     const productId = req.params.id;
+    const { image_url } = req.body;
+
+    if (!image_url || typeof image_url !== 'string') {
+      return res.status(400).json({ error: 'image_url obrigatório' });
+    }
+
+    // Aceita URLs do Cloudinary (frontend faz o upload direto pra eles)
+    if (!image_url.startsWith('https://res.cloudinary.com/')) {
+      return res.status(400).json({ error: 'URL inválida (precisa ser Cloudinary)' });
+    }
+
     const count = await pool.query('SELECT COUNT(*) FROM product_images WHERE product_id=$1', [productId]);
     if (parseInt(count.rows[0].count) >= 4) return res.status(400).json({ error: 'Máximo de 4 fotos' });
-    const imageData = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
-    const { rows } = await pool.query('INSERT INTO product_images (product_id, image_data, image_order) VALUES ($1, $2, $3) RETURNING id', [productId, imageData, parseInt(count.rows[0].count)]);
+
+    const { rows } = await pool.query(
+      'INSERT INTO product_images (product_id, image_data, image_order) VALUES ($1, $2, $3) RETURNING id',
+      [productId, image_url, parseInt(count.rows[0].count)]
+    );
     res.json({ ok: true, id: rows[0].id });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) {
+    console.error('Erro upload imagem:', e);
+    res.status(500).json({ error: e.message });
+  }
 });
 
 app.delete('/api/admin/images/:id', auth, async (req, res) => {
@@ -132,9 +152,30 @@ app.put('/api/admin/settings', auth, async (req, res) => {
   catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.put('/api/admin/settings/banner-image', auth, upload.single('image'), async (req, res) => {
-  try { const imageData = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`; await pool.query("INSERT INTO settings (key, value) VALUES ('banner_image', $1) ON CONFLICT (key) DO UPDATE SET value = $1", [imageData]); res.json({ ok: true }); }
-  catch (e) { res.status(500).json({ error: e.message }); }
+// ═══════════════════════════════════════════════════════════
+// CLOUDINARY: upload de banner (recebe URL, não arquivo)
+// ═══════════════════════════════════════════════════════════
+app.put('/api/admin/settings/banner-image', auth, async (req, res) => {
+  try {
+    const { image_url } = req.body;
+
+    if (!image_url || typeof image_url !== 'string') {
+      return res.status(400).json({ error: 'image_url obrigatório' });
+    }
+
+    if (!image_url.startsWith('https://res.cloudinary.com/')) {
+      return res.status(400).json({ error: 'URL inválida (precisa ser Cloudinary)' });
+    }
+
+    await pool.query(
+      "INSERT INTO settings (key, value) VALUES ('banner_image', $1) ON CONFLICT (key) DO UPDATE SET value = $1",
+      [image_url]
+    );
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('Erro upload banner:', e);
+    res.status(500).json({ error: e.message });
+  }
 });
 
 app.get('/api/admin/testimonials', auth, async (req, res) => {
